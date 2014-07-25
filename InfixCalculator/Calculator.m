@@ -96,9 +96,8 @@ typedef enum {RIP, SUB, ADD, DIV, MUL, LEP} operatorType;
 				// Save operator
 				if (operator.type != RIP) {
 					[stack addObject:operator];
+					operatorLast = YES;
 				}
-				
-				operatorLast = YES;
 			}
 		}
 	}
