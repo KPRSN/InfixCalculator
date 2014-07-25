@@ -46,6 +46,7 @@ typedef enum {RIP, SUB, ADD, DIV, MUL, LEP} operatorType;
 	
 	// Start conversion
 	NSMutableString *operand = [[NSMutableString alloc] init];
+	BOOL operatorLast = YES;
 	for (int i = 0; i < infix.length; ++i) {
 		char c = [infix characterAtIndex:i];
 		
@@ -59,31 +60,45 @@ typedef enum {RIP, SUB, ADD, DIV, MUL, LEP} operatorType;
 		if ([operandCharacters characterIsMember:c]) {
 			// Operand part
 			[operand appendString:[NSString stringWithFormat:@"%c", c]];
+			operatorLast = NO;
 		}
 		else if ([operatorCharacters characterIsMember:c]) {
 			// Operator
 			Operator *operator = [Operator operatorFromChar:c];
 			
-			// Pop stack until lower type is found
-			Operator *topOperator = [stack lastObject];
-			while (stack.count > 0 && topOperator.type > operator.type) {
-				// Stop popping where a complete parenthesis is found
-				if (topOperator.type != LEP || operator.type == RIP) {
-					[stack removeObject:topOperator];
-					
-					// Don't add LEP to postfix
-					if (topOperator.type != LEP) {
-						[postfix addObject:topOperator];
-					}
+			// Negative/positive number or an actual operation
+			if (operatorLast && (operator.type == SUB || operator.type == ADD)) {
+				// Positive/nexative
+				if (operator.type == SUB) {
+					[operand insertString:@"-" atIndex:0];
 				}
-				else break;
-				
-				topOperator = [stack lastObject];
+				operatorLast = NO;
 			}
-			
-			// Save operator
-			if (operator.type != RIP) {
-				[stack addObject:operator];
+			else {
+				// Operation
+				// Pop stack until lower type is found
+				Operator *topOperator = [stack lastObject];
+				while (stack.count > 0 && topOperator.type > operator.type) {
+					// Stop popping where a complete parenthesis is found
+					if (topOperator.type != LEP || operator.type == RIP) {
+						[stack removeObject:topOperator];
+						
+						// Don't add LEP to postfix
+						if (topOperator.type != LEP) {
+							[postfix addObject:topOperator];
+						}
+					}
+					else break;
+					
+					topOperator = [stack lastObject];
+				}
+				
+				// Save operator
+				if (operator.type != RIP) {
+					[stack addObject:operator];
+				}
+				
+				operatorLast = YES;
 			}
 		}
 	}
