@@ -99,7 +99,6 @@ typedef enum {RIP, SUB, ADD, DIV, MUL, LEP, USU} operatorType;
 		if ([component isKindOfClass:[Operator class]]) {
 			// Operator found
 			Operator *op = component;
-			
 			if (op.type == LEP) {
 				// Left parenthesis
 				[stack addObject:op];
@@ -108,17 +107,15 @@ typedef enum {RIP, SUB, ADD, DIV, MUL, LEP, USU} operatorType;
 				// Operator or right parenthesis
 				Operator *top = [stack lastObject];
 				while (stack.count > 0 && (op.type <= top.type || op.type == RIP)) {
-					// Pop top of the stack
+					// Pop top of the stack, stop if parenthesis is found
 					[stack removeLastObject];
-					if (top.type == LEP) {
-						// Complete parenthesis
-						break;
-					}
+					if (top.type == LEP) break;
 					else [postfix addObject:top];
+					
 					top = [stack lastObject];
 				}
 				
-				// Add operation to stack (right parenthesis no good here)
+				// Add operator to stack
 				if (op.type != RIP) {
 					[stack addObject:op];
 				}
@@ -179,10 +176,8 @@ typedef enum {RIP, SUB, ADD, DIV, MUL, LEP, USU} operatorType;
 	if (stack.count == 1) {
 		return [stack objectAtIndex:0];
 	}
-	else {
-		NSLog(@"ERROR: Too many values!");
-	}
 	
+	NSLog(@"ERROR: Too many values!");
 	return [NSNumber numberWithDouble:0.0f];
 }
 @end
