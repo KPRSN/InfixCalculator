@@ -9,8 +9,8 @@
 #import "Calculator.h"
 
 // Operation types
-// {right parenthesis, subtraction, addition, divition multiplication, left parenthesis}
-typedef enum {RIP, SUB, ADD, DIV, MUL, LEP} operatorType;
+// {right parenthesis, subtraction, addition, divition multiplication, unary subtraction, left parenthesis}
+typedef enum {RIP, SUB, ADD, DIV, MUL, LEP, USU} operatorType;
 
 /*
  * Helper class for handling operators
@@ -29,76 +29,104 @@ typedef enum {RIP, SUB, ADD, DIV, MUL, LEP} operatorType;
 // Execute calculation based on input string
 + (NSNumber *)calculate:(NSString *)calculation
 {
+	// Split infix
+	NSArray *infix = [self splitInfixCalculation:calculation];
 	// Infix to postfix
-	NSArray *postfix = [self infixToPostfix:calculation];
+	NSArray *postfix = [self infixToPostfix:infix];
 	// Calculate
 	return [self executeCalculation:postfix];
 }
 
-// Convert infix expression to postfix
-+ (NSArray *)infixToPostfix:(NSString *)infix
+// Split infix calculation into operators and operands
++ (NSArray *)splitInfixCalculation:(NSString *)calculation
 {
 	NSCharacterSet *operatorCharacters = [NSCharacterSet characterSetWithCharactersInString:@"-+/*()"];
 	NSCharacterSet *operandCharacters = [NSCharacterSet characterSetWithCharactersInString:@"1234567890."];
 	
+	NSMutableArray *result = [[NSMutableArray alloc] init];
+	NSMutableString *operand = [[NSMutableString alloc] init];
+	for (int i = 0; i < calculation.length; ++i) {
+		char c = [calculation characterAtIndex:i];
+		
+		if ([operatorCharacters characterIsMember:c]) {
+			// Operator
+			// Save buffered operand
+			if (operand.length > 0) {
+				[result addObject:[NSNumber numberWithDouble:[operand doubleValue]]];
+				[operand setString:@""];
+			}
+			
+			Operator *op = [Operator operatorFromChar:c];
+			
+			// Unary check
+			// Operator is unary only if...
+			//		- the previous component was an operator or nothing at all
+			//		- the previous component wasn't a parenthesis
+			//		- and the operator is either addition or subtraction.
+			if ((result.count == 0 || [[result lastObject] isKindOfClass:[Operator class]]) &&
+				(op.type == ADD || op.type == SUB)) {
+				Operator *top = [result lastObject];
+				if (top == nil || (top.type != RIP && top.type != LEP)) {
+					// Ignore unary addition
+					if (op.type == ADD) continue;
+					else op.type = USU;
+				}
+			}
+			
+			[result addObject:op];
+		}
+		else if ([operandCharacters characterIsMember:c]) {
+			// Operand
+			[operand appendString:[NSString stringWithFormat:@"%c", c]];
+		}
+	}
+	
+	// Save remaining operand
+	if (operand.length > 0) {
+		[result addObject:[NSNumber numberWithDouble:[operand doubleValue]]];
+	}
+
+	return result;
+}
+
+// Convert infix expression to postfix
++ (NSArray *)infixToPostfix:(NSArray *)infix
+{
 	NSMutableArray *postfix = [[NSMutableArray alloc] init];
 	NSMutableArray *stack = [[NSMutableArray alloc] init];
 	
-	// Start conversion
-	NSMutableString *operand = [[NSMutableString alloc] init];
-	BOOL operatorLast = YES;
-	for (int i = 0; i < infix.length; ++i) {
-		char c = [infix characterAtIndex:i];
-		
-		// Save operand
-		if (operand.length > 0 && ([operatorCharacters characterIsMember:c] || i == infix.length-1)) {
-			[postfix addObject:[NSNumber numberWithDouble:[operand doubleValue]]];
-			[operand setString:@""];
-		}
-		
-		// Test character
-		if ([operandCharacters characterIsMember:c]) {
-			// Operand part
-			[operand appendString:[NSString stringWithFormat:@"%c", c]];
-			operatorLast = NO;
-		}
-		else if ([operatorCharacters characterIsMember:c]) {
-			// Operator
-			Operator *operator = [Operator operatorFromChar:c];
+	for (id component in infix) {
+		if ([component isKindOfClass:[Operator class]]) {
+			// Operator found
+			Operator *op = component;
 			
-			// Negative/positive number or an actual operation
-			if (operatorLast && (operator.type == SUB || operator.type == ADD)) {
-				// Positive/nexative
-				if (operator.type == SUB) {
-					[operand insertString:@"-" atIndex:0];
-				}
-				operatorLast = NO;
+			if (op.type == LEP) {
+				// Left parenthesis
+				[stack addObject:op];
 			}
 			else {
-				// Operation
-				// Pop stack until lower type is found
-				Operator *topOperator = [stack lastObject];
-				while (stack.count > 0 && topOperator.type > operator.type) {
-					// Stop popping where a complete parenthesis is found
-					if (topOperator.type != LEP || operator.type == RIP) {
-						[stack removeObject:topOperator];
-						
-						// Don't add LEP to postfix
-						if (topOperator.type != LEP) {
-							[postfix addObject:topOperator];
-						}
+				// Operator or right parenthesis
+				Operator *top = [stack lastObject];
+				while (stack.count > 0 && (op.type <= top.type || op.type == RIP)) {
+					// Pop top of the stack
+					[stack removeLastObject];
+					if (top.type == LEP) {
+						// Complete parenthesis
+						break;
 					}
-					else break;
-					
-					topOperator = [stack lastObject];
+					else [postfix addObject:top];
+					top = [stack lastObject];
 				}
 				
-				// Save operator
-				if (operator.type != RIP) {
-					[stack addObject:operator];
-					operatorLast = YES;
+				// Add operation to stack (right parenthesis no good here)
+				if (op.type != RIP) {
+					[stack addObject:op];
 				}
 			}
+		}
+		else if ([component isKindOfClass:[NSNumber class]]) {
+			// Operand found
+			[postfix addObject:component];
 		}
 	}
 	
@@ -117,14 +145,21 @@ typedef enum {RIP, SUB, ADD, DIV, MUL, LEP} operatorType;
 {
 	NSMutableArray *stack = [[NSMutableArray alloc] init];
 	
-	for (NSString *component in postfix) {
+	for (id component in postfix) {
 		if ([component isKindOfClass:[NSValue class]]) {
 			// Operand
 			[stack addObject:component];
 		}
 		else {
 			// Operator
-			if (stack.count >= 2) {
+			Operator *operator = component;
+			if (operator.type == USU && stack.count > 0) {
+				// Unary minus
+				NSNumber *first = [stack lastObject];
+				[stack removeLastObject];
+				[stack addObject:[operator calculate:first second:nil]];
+			}
+			else if (stack.count >= 2) {
 				// Pop operands from stack
 				NSNumber *second = [stack lastObject];
 				[stack removeLastObject];
@@ -132,7 +167,7 @@ typedef enum {RIP, SUB, ADD, DIV, MUL, LEP} operatorType;
 				[stack removeLastObject];
 
 				// Calculate result and push to stack
-				[stack addObject:[(Operator *)component calculate:first second:second]];
+				[stack addObject:[operator calculate:first second:second]];
 			}
 			else {
 				NSLog(@"ERROR: Not sufficient values!");
@@ -147,7 +182,6 @@ typedef enum {RIP, SUB, ADD, DIV, MUL, LEP} operatorType;
 	else {
 		NSLog(@"ERROR: Too many values!");
 	}
-	
 	
 	return [NSNumber numberWithDouble:0.0f];
 }
@@ -196,6 +230,7 @@ typedef enum {RIP, SUB, ADD, DIV, MUL, LEP} operatorType;
 		case ADD: return [NSNumber numberWithDouble:[first doubleValue] + [second doubleValue]];
 		case DIV: return [NSNumber numberWithDouble:[first doubleValue] / [second doubleValue]];
 		case MUL: return [NSNumber numberWithDouble:[first doubleValue] * [second doubleValue]];
+		case USU: return [NSNumber numberWithDouble:[first doubleValue] * -1.0f];
 		default: return [NSNumber numberWithDouble:0.0f];
 	}
 }
